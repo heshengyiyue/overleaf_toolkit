@@ -2,4 +2,4 @@ wget http://mirror.ctan.org/systems/texlive/tlnet/update-tlmgr-latest.sh
 chmod +x update-tlmgr-latest.sh
 ./update-tlmgr-latest.sh -- --update
 
-tlmgr install booktabs ifsym xcolor times mathtools courier
+tlmgr install booktabs ifsym xcolor times mathtools courier ieeetran algorithms subfig caption sttools preprint
