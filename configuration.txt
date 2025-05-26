@@ -1,0 +1,13 @@
+docker exec -it sharelatex bash
+
+wget http://mirror.ctan.org/systems/texlive/tlnet/update-tlmgr-latest.sh
+chmod +x update-tlmgr-latest.sh
+./update-tlmgr-latest.sh -- --update
+
+# install the missing packages
+tlmgr search --global --file <name of missing file>
+
+tlmgr install booktabs ifsym xcolor times mathtools courier ieeetran elsarticle algorithms subfig caption sttools preprint float cite helvetic multirow makecell supertabular tabularray lipsum
+
+# install all package at once
+tlmgr install scheme-full
