@@ -6,6 +6,11 @@ function read_config() {
   source "$TOOLKIT_ROOT/lib/default.rc"
   # shellcheck source=/dev/null
   source "$TOOLKIT_ROOT/config/overleaf.rc"
+
+  if [[ $SERVER_PRO != "true" || $IMAGE_VERSION_MAJOR -lt 4 ]]; then
+    # Force git bridge to be disabled if not ServerPro >= 4
+    GIT_BRIDGE_ENABLED=false
+  fi
 }
 
 function read_image_version() {
@@ -17,6 +22,89 @@ function read_image_version() {
   IMAGE_VERSION_MAJOR=${BASH_REMATCH[1]}
   IMAGE_VERSION_MINOR=${BASH_REMATCH[2]}
   IMAGE_VERSION_PATCH=${BASH_REMATCH[3]}
+}
+
+function read_mongo_version() {
+  local mongo_image=$(read_configuration "MONGO_IMAGE")
+  local mongo_version=$(read_configuration "MONGO_VERSION")
+  if [ -z "${mongo_version}" ]; then
+    if [[ "$mongo_image" =~ ^mongo:([0-9]+)\.(.*)$ ]]; then
+      # when running a chain of commands (example: bin/up -> bin/docker-compose) we're passing
+      # SKIP_WARNINGS=true to prevent the warning message to be printed several times
+      if [[ ${SKIP_WARNINGS:-null} != "true" ]]; then
+        echo "-------------------  WARNING  ----------------------"
+        echo "  Deprecation warning: the mongo image is now split between MONGO_IMAGE"
+        echo "  and MONGO_VERSION configurations. Please update your config/overleaf.rc as"
+        echo "  your current configuration may stop working in future versions of the toolkit."
+        echo "  Example: MONGO_IMAGE=mongo"
+        echo "           MONGO_VERSION=6.0"
+        echo "-------------------  WARNING  ----------------------"
+      fi
+      MONGO_VERSION_MAJOR=${BASH_REMATCH[1]}
+      MONGO_DOCKER_IMAGE="$mongo_image"
+    else
+      echo "---------------------  ERROR  -----------------------"
+      echo "  The mongo image is now split between MONGO_IMAGE and MONGO_VERSION configurations."
+      echo "  Please update your config/overleaf.rc."
+      echo ""
+      echo "  MONGO_VERSION must start with the actual major version of mongo, followed by a dot."
+      echo "  Example: MONGO_IMAGE=my.dockerhub.com/custom-mongo"
+      echo "           MONGO_VERSION=6.0-custom"
+      echo "---------------------  ERROR  -----------------------"
+      exit 1
+    fi
+  else
+    if [[ ! "$mongo_version" =~ ^([0-9]+)\.(.+)$ ]]; then
+      echo "---------------------  ERROR  -----------------------"
+      echo "  Invalid MONGO_VERSION: $mongo_version"
+      echo ""
+      echo "  MONGO_VERSION must start with the actual major version of mongo, followed by a dot."
+      echo "  Example: MONGO_IMAGE=my.dockerhub.com/custom-mongo"
+      echo "           MONGO_VERSION=6.0-custom"
+      echo "---------------------  ERROR  -----------------------"
+      exit 1
+    fi
+    MONGO_VERSION_MAJOR=${BASH_REMATCH[1]}
+    MONGO_DOCKER_IMAGE="$mongo_image:$mongo_version"
+  fi
+
+  if [[ "$MONGO_VERSION_MAJOR" -lt 6 ]]; then
+    MONGOSH="mongo"
+  else
+    MONGOSH="mongosh"
+  fi
+}
+
+function set_server_pro_image_name() {
+  local version=$1
+  local image_name
+  if [[ -n ${OVERLEAF_IMAGE_NAME:-} ]]; then
+    image_name="$OVERLEAF_IMAGE_NAME"
+  elif [[ $SERVER_PRO == "true" ]]; then
+    image_name="quay.io/sharelatex/sharelatex-pro"
+  else
+    image_name="sharelatex/sharelatex"
+  fi
+  export IMAGE="$image_name:$version"
+}
+
+function set_git_bridge_image_name() {
+  local version=$1
+  local image_name
+  if [[ -n ${GIT_BRIDGE_IMAGE:-} ]]; then
+    image_name="$GIT_BRIDGE_IMAGE"
+  else
+    image_name="quay.io/sharelatex/git-bridge"
+  fi
+
+  # since we're reusing the GIT_BRIDGE_IMAGE environment variable, we check here if the version
+  # has already been added to it, for scenarios where this function is called more than once
+  if [[ "$image_name" == *"$version" ]]; then
+    export GIT_BRIDGE_IMAGE="$image_name"
+  else
+    export GIT_BRIDGE_IMAGE="$image_name:$version"
+  fi
+
 }
 
 function check_retracted_version() {
@@ -129,5 +217,11 @@ function check_sharelatex_env_vars() {
 function read_variable() {
   local name=$1
   grep -E "^$name=" "$TOOLKIT_ROOT/config/variables.env" \
-  | sed -r "s/^$name=([\"']*)(.+)\1*\$/\2/"
+  | sed -r "s/^$name=([\"']?)(.+)\1\$/\2/"
+}
+
+function read_configuration() {
+  local name=$1
+  grep -E "^$name=" "$TOOLKIT_ROOT/config/overleaf.rc" \
+  | sed -r "s/^$name=([\"']?)(.+)\1\$/\2/"
 }

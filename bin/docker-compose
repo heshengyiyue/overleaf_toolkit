@@ -28,8 +28,21 @@ function build_environment() {
   if [[ $MONGO_ENABLED == "true" ]]; then
     set_mongo_vars
   fi
-  if [[ $SIBLING_CONTAINERS_ENABLED == "true" ]]; then
-    set_sibling_containers_vars
+  if [[ "$SIBLING_CONTAINERS_ENABLED" == "true" ]]; then
+    if [[ $SERVER_PRO == "true" ]]; then
+      set_sibling_containers_vars
+    else
+      if [[ ${SKIP_WARNINGS:-null} != "true" ]]; then
+        echo "WARNING: SIBLING_CONTAINERS_ENABLED=true is not supported in Overleaf Community Edition." >&2
+        echo "  Sibling containers are not available in Community Edition, which is intended for use in environments where all users are trusted. Community Edition is not appropriate for scenarios where isolation of users is required." >&2
+        echo "  When not using Sibling containers, users have full read and write access to the 'sharelatex' container resources (filesystem, network, environment variables) when running LaTeX compiles." >&2
+        echo "  Sibling containers are offered as part of our Server Pro offering and you can read more about the differences at https://www.overleaf.com/for/enterprises/features." >&2
+        echo "  Falling back using insecure in-container compiles. Set SIBLING_CONTAINERS_ENABLED=false in config/overleaf.rc to silence this warning." >&2
+      fi
+    fi
+  fi
+  if [[ "${OVERLEAF_LOG_PATH:-null}" != "null" ]]; then
+    set_logging_vars
   fi
   if [[ $NGINX_ENABLED == "true" ]]; then
     set_nginx_vars
@@ -46,6 +59,9 @@ function build_environment() {
 
 function canonicalize_data_paths() {
   OVERLEAF_DATA_PATH=$(cd "$TOOLKIT_ROOT"; realpath "$OVERLEAF_DATA_PATH")
+  if [[ "${OVERLEAF_LOG_PATH:-null}" != "null" ]]; then
+    OVERLEAF_LOG_PATH=$(cd "$TOOLKIT_ROOT"; realpath "$OVERLEAF_LOG_PATH")
+  fi
   MONGO_DATA_PATH=$(cd "$TOOLKIT_ROOT"; realpath "$MONGO_DATA_PATH")
   REDIS_DATA_PATH=$(cd "$TOOLKIT_ROOT"; realpath "$REDIS_DATA_PATH")
   GIT_BRIDGE_DATA_PATH=$(cd "$TOOLKIT_ROOT"; realpath "$GIT_BRIDGE_DATA_PATH")
@@ -60,27 +76,16 @@ function set_base_vars() {
     DOCKER_COMPOSE_FLAGS+=(-f "$TOOLKIT_ROOT/lib/docker-compose.vars.yml")
   fi
 
-  local image_name
-  if [[ -n ${OVERLEAF_IMAGE_NAME:-} ]]; then
-    image_name="$OVERLEAF_IMAGE_NAME"
-  elif [[ $SERVER_PRO == "true" ]]; then
-    image_name="quay.io/sharelatex/sharelatex-pro"
-  else
-    image_name="sharelatex/sharelatex"
-  fi
-  export IMAGE="$image_name:$IMAGE_VERSION"
+  set_server_pro_image_name "$IMAGE_VERSION"
 
   if [[ ${OVERLEAF_LISTEN_IP:-null} == "null" ]];
   then
-    echo "WARNING: the value of OVERLEAF_LISTEN_IP is not set in config/overleaf.rc. This value must be set to the public IP address for direct container access. Defaulting to 0.0.0.0" >&2
+    if [[ ${SKIP_WARNINGS:-null} != "true" ]]; then
+      echo "WARNING: the value of OVERLEAF_LISTEN_IP is not set in config/overleaf.rc. This value must be set to the public IP address for direct container access. Defaulting to 0.0.0.0" >&2
+    fi
     OVERLEAF_LISTEN_IP="0.0.0.0"
   fi
   export OVERLEAF_LISTEN_IP
-
-  if [[ $SERVER_PRO != "true" || $IMAGE_VERSION_MAJOR -lt 4 ]]; then
-    # Force git bridge to be disabled if not ServerPro >= 4
-    GIT_BRIDGE_ENABLED=false
-  fi
 
   HAS_WEB_API=false
   if [[ $IMAGE_VERSION_MAJOR -gt 4 ]]; then
@@ -109,6 +114,19 @@ function set_redis_vars() {
   DOCKER_COMPOSE_FLAGS+=(-f "$TOOLKIT_ROOT/lib/docker-compose.redis.yml")
   export REDIS_IMAGE
   export REDIS_DATA_PATH
+
+  if [[ -z "${REDIS_AOF_PERSISTENCE:-}" ]]; then
+    if [[ ${SKIP_WARNINGS:-null} != "true" ]]; then
+      echo "WARNING: the value of REDIS_AOF_PERSISTENCE is not set in config/overleaf.rc"
+      echo "  See https://github.com/overleaf/overleaf/wiki/Release-Notes-5.x.x#redis-aof-persistence-enabled-by-default"
+    fi
+    REDIS_COMMAND="redis-server"
+  elif [[ $REDIS_AOF_PERSISTENCE == "true" ]]; then
+    REDIS_COMMAND="redis-server --appendonly yes"
+  else
+    REDIS_COMMAND="redis-server"
+  fi
+  export REDIS_COMMAND
 }
 
 # Set environment variables for docker-compose.mongo.yml
@@ -123,7 +141,8 @@ function set_mongo_vars() {
   export MONGO_ARGS
 
   export MONGO_DATA_PATH
-  export MONGO_IMAGE
+  export MONGO_DOCKER_IMAGE
+  export MONGOSH
 }
 
 # Set environment variables for docker-compose.sibling-containers.yml
@@ -131,6 +150,19 @@ function set_sibling_containers_vars() {
   DOCKER_COMPOSE_FLAGS+=(-f "$TOOLKIT_ROOT/lib/docker-compose.sibling-containers.yml")
   export DOCKER_SOCKET_PATH
   export OVERLEAF_DATA_PATH
+}
+
+# Set environment variables for docker-compose.logging.yml
+function set_logging_vars() {
+  DOCKER_COMPOSE_FLAGS+=(-f "$TOOLKIT_ROOT/lib/docker-compose.logging.yml")
+
+  if [[ $IMAGE_VERSION_MAJOR -ge 5 ]]; then
+    OVERLEAF_IN_CONTAINER_LOG_PATH="/var/log/overleaf"
+  else
+    OVERLEAF_IN_CONTAINER_LOG_PATH="/var/log/sharelatex"
+  fi
+  export OVERLEAF_IN_CONTAINER_LOG_PATH
+  export OVERLEAF_LOG_PATH
 }
 
 # Set environment variables for docker-compose.nginx.yml
@@ -159,12 +191,7 @@ function set_nginx_vars() {
 
 # Set environment variables for docker-compose.git-bridge.yml
 function set_git_bridge_vars() {
-  local image_name
-  if [[ -n ${GIT_BRIDGE_IMAGE:-} ]]; then
-    image_name="$GIT_BRIDGE_IMAGE"
-  else
-    image_name="quay.io/sharelatex/git-bridge:$IMAGE_VERSION"
-  fi
+  set_git_bridge_image_name "$IMAGE_VERSION"
 
   GIT_BRIDGE_API_BASE_URL="http://sharelatex/api/v0/"
   if [[ $HAS_WEB_API == "true" ]]; then
@@ -173,7 +200,6 @@ function set_git_bridge_vars() {
 
   DOCKER_COMPOSE_FLAGS+=(-f "$TOOLKIT_ROOT/lib/docker-compose.git-bridge.yml")
   export GIT_BRIDGE_API_BASE_URL
-  export GIT_BRIDGE_IMAGE=${image_name}
   export GIT_BRIDGE_DATA_PATH
   export GIT_BRIDGE_LOG_LEVEL
 }
@@ -199,6 +225,9 @@ function docker_compose() {
     exec docker compose "${flags[@]}"
   elif command -v docker-compose >/dev/null; then
     # Fall back to docker-compose v1
+    if [[ ${SKIP_WARNINGS:-null} != "true" ]]; then
+      echo "WARNING: docker-compose v1 has reached its End Of Life in July 2023 (https://docs.docker.com/compose/migrate/). Support for docker-compose v1 in the Overleaf Toolkit will be dropped with the release of Server Pro 5.2. We recommend upgrading to Docker Compose v2 before then." >&2
+    fi
     exec docker-compose "${flags[@]}"
   else
     echo "ERROR: Could not find Docker Compose." >&2
@@ -207,6 +236,7 @@ function docker_compose() {
 }
 
 read_image_version
+read_mongo_version
 read_config
 check_retracted_version
 check_sharelatex_env_vars

@@ -37,13 +37,13 @@ function check_config() {
 
 function initiate_mongo_replica_set() {
   echo "Initiating Mongo replica set..."
-  "$TOOLKIT_ROOT/bin/docker-compose" up -d mongo
-  "$TOOLKIT_ROOT/bin/docker-compose" exec -T mongo sh -c '
-    while ! mongo --eval "db.version()" > /dev/null; do
+  env SKIP_WARNINGS=true "$TOOLKIT_ROOT/bin/docker-compose" up -d mongo
+  env SKIP_WARNINGS=true "$TOOLKIT_ROOT/bin/docker-compose" exec -T mongo sh -c '
+    while ! '$MONGOSH' --eval "db.version()" > /dev/null; do
       echo "Waiting for Mongo..."
       sleep 1
     done
-    mongo --eval "rs.initiate({ _id: \"overleaf\", members: [ { _id: 0, host: \"mongo:27017\" } ] })" > /dev/null'
+    '$MONGOSH' --eval "db.isMaster().primary || rs.initiate({ _id: \"overleaf\", members: [ { _id: 0, host: \"mongo:27017\" } ] })" > /dev/null'
 }
 
 function pull_sandboxed_compiles() {
@@ -69,6 +69,24 @@ function pull_sandboxed_compiles() {
   done
 }
 
+function notify_about_not_using_detach_mode() {
+  local detached=false
+  for arg in "$@"; do
+    case "$arg" in
+        -d|--detach) detached=true;;
+    esac
+  done
+  if [[ "$detached" == false ]]; then
+    echo
+    echo '---'
+    echo
+    echo '  NOTICE: You are running "bin/up" without the detach mode ("-d" or "--detach" option). Behind the scenes, we will invoke "docker compose up", which will tail the container logs indefinitely until you issue a keyboard interrupt (CTRL+C).'
+    echo
+    echo '---'
+    echo
+  fi
+}
+
 function __main__() {
   if [[ "${1:-null}" == "help" ]] || [[ "${1:-null}" == "--help" ]]; then
     usage
@@ -76,6 +94,7 @@ function __main__() {
   fi
 
   read_image_version
+  SKIP_WARNINGS=true read_mongo_version
   check_config
   read_config
 
@@ -83,10 +102,11 @@ function __main__() {
     initiate_mongo_replica_set
   fi
 
-  if [[ "$SIBLING_CONTAINERS_ENABLED" == "true" ]]; then
+  if [[ $SERVER_PRO == "true" && "$SIBLING_CONTAINERS_ENABLED" == "true" ]]; then
     pull_sandboxed_compiles
   fi
 
+  notify_about_not_using_detach_mode "$@"
   exec "$TOOLKIT_ROOT/bin/docker-compose" up "$@"
 }
 

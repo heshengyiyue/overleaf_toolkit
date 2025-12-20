@@ -1,5 +1,4 @@
 ---
-version: '2.2'
 services:
 
     redis:
@@ -8,6 +7,7 @@ services:
         volumes:
             - "${REDIS_DATA_PATH}:/data"
         container_name: redis
+        command: ${REDIS_COMMAND}
         expose:
             - 6379
 

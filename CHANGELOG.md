@@ -1,5 +1,134 @@
 # Changelog
 
+## 2025-04-30
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.4.1`.
+
+## 2025-04-11
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.4.0`.
+
+## 2025-03-21
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.3.3`.
+
+## 2025-03-11
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.3.2`.
+
+
+## 2025-01-29
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.3.1`.
+
+## 2025-01-06
+### Added
+- Add new config option for skipping docker pull before upgrading
+- Document config options for air-gapped setups
+
+## 2024-11-18
+### Added
+- When a custom `GIT_BRIDGE_IMAGE` is set, `bin/upgrade` no longer tries to pull the new version, and prompts
+  the user to update and tag the custom image separately.
+- Tighten SSL security on nginx proxy
+
+## 2024-10-29
+### Added
+- Pull new images from `bin/upgrade` ahead of stopping containers
+
+## 2024-10-24
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.2.1`.
+- Drop support for Docker Compose v1. [How to switch to Compose V2](https://docs.docker.com/compose/releases/migrate/#how-do-i-switch-to-compose-v2).
+  Docker Compose v1 has reached its End Of Life in July 2023.
+
+### Changed
+- If set, the `overleaf.rc` entry `GIT_BRIDGE_IMAGE` must be specified without the version now.
+
+  Example:
+  ```diff
+  -GIT_BRIDGE_IMAGE=my.registry.com/overleaf/git-bridge:5.1.1
+  +GIT_BRIDGE_IMAGE=my.registry.com/overleaf/git-bridge
+  ```
+
+## 2024-09-24
+### Added
+- Print warning when running `bin/up` without detach mode
+
+## 2024-09-11
+### Added
+- Add loud warning to `bin/doctor` when not using Sandboxed Compiles/`SIBLING_CONTAINERS_ENABLED=true`
+- Add loud warning for using Community Edition with `SIBLING_CONTAINERS_ENABLED=true`
+
+## 2024-09-03
+### Added
+- Add a new config option `OVERLEAF_LOG_PATH` for making [application logs](https://github.com/overleaf/overleaf/wiki/Log-files) available on the Docker host.
+
+## 2024-08-27
+### Added
+- Surface `MONGO_VERSION` from `bin/doctor`
+
+## 2024-08-20
+### Fixed
+- Fix unquoting of variables (e.g. `ALL_TEX_LIVE_DOCKER_IMAGES`)
+
+## 2024-08-13
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.1.1`.
+
+## 2024-07-30
+### Added
+- New `bin/run-script` command
+
+## 2024-07-29
+### Fixed
+- Sandboxed Compiles is available for Server Pro only
+
+## 2024-07-17
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.1.0`.
+
+- `SIBLING_CONTAINERS_ENABLED` is now set to `true` for new installs in [`config-seed/overleaf.rc`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/overleaf.rc).
+
+  We strongly recommend enabling the [Sandboxed Compiles feature](https://github.com/overleaf/toolkit/blob/master/doc/sandboxed-compiles.md) 
+  for existing installations as well.
+ 
+- Added "--appendonly yes" configuration to redis.
+
+  Redis persistence documentation: https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+- Updated mongo to 6.0 in [`config-seed/overleaf.rc`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/overleaf.rc).
+
+  Mongo image name needs to be split between `MONGO_IMAGE` (with just the image name) and `MONGO_VERSION` in `config/overleaf.rc`.
+
+## 2024-07-16
+### Added
+- Added support for Mongo 6.0.
+
+## 2024-07-12
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.0.7`.
+  :warning: This is a security release. Please check the [release notes](https://github.com/overleaf/overleaf/wiki/Release-Notes-5.x.x#server-pro-507) for details.
+
+  Note: Server Pro version 4.2.7 contains the equivalent security update for the 4.x.x release line.
+
+## 2024-06-21
+### Added
+- Added warning for usage of legacy docker-compose v1.
+
+  docker-compose v1 has reached its End Of Life in July 2023 (https://docs.docker.com/compose/migrate/).
+  Support for docker-compose v1 in the Overleaf Toolkit will be dropped with the release of Server Pro 5.2.
+  We recommend upgrading to Docker Compose v2 before then.
+
+- Added warning for usage of End Of Life Docker versions before v23
+
+## 2024-06-20
+### Added
+- Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.0.6`.
+  :warning: This is a security release. Please check the [release notes](https://github.com/overleaf/overleaf/wiki/Release-Notes-5.x.x#server-pro-506) for details.
+
+  Note: Server Pro version 4.2.6 contains the equivalent security update for the 4.x.x release line.
+
 ## 2024-06-11
 ### Added
 - Updated default [`version`](https://github.com/overleaf/toolkit/blob/master/lib/config-seed/version) to `5.0.5`.
@@ -10,6 +139,8 @@
 ## 2024-05-27
 ### Added
 - Pull TeX Live images from `bin/up`
+
+  You can disable the automatic pulling using `SIBLING_CONTAINERS_PULL=false` in your `config/overleaf.rc` file.
 
 ## 2024-05-24
 ### Added
